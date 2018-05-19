@@ -59,19 +59,15 @@ public:
 
 
 private:
+	void SimulateMove(FGoKartMove move);
+
 	void UpdateLocationFromVelocity(float DeltaTime);
-
-	UFUNCTION(Server, Reliable, WithValidation)
-	void Server_MoveForward(float value);
-
-	UFUNCTION(Server, Reliable, WithValidation)
-	void Server_MoveRight(float value);
 
 	void MoveForward(float value);
 	void MoveRight(float value);
 
-	void ApplyRotation(float DeltaTime);
-	FVector CalculateCurrentForce() const;
+	void ApplyRotation(const FGoKartMove& move);
+	FVector CalculateMoveForce(const FGoKartMove& move) const;
 
 	UPROPERTY(EditAnywhere)
 	float mass = 1000.0f;
@@ -88,17 +84,19 @@ private:
 	UPROPERTY(EditAnywhere)
 	float rollingResistanceCoefficient = 0.015f;
 
-	UPROPERTY(Replicated)
 	FVector velocity;
 
-	UPROPERTY(Replicated)
 	float throttle;
-	UPROPERTY(Replicated)
 	float steeringThrow;
 
-	UPROPERTY(ReplicatedUsing = OnRep_ReplicatedTransformation)
-	FTransform replicated_Transformation;
+
+	UPROPERTY(ReplicatedUsing = OnRep_ServerState)
+	FGoKartState rep_ServerState;
 
 	UFUNCTION()
-	void OnRep_ReplicatedTransformation();
+	void OnRep_ServerState();
+
+
+	UFUNCTION(Server, Reliable, WithValidation)
+	void Server_SendMove(FGoKartMove move);
 };
