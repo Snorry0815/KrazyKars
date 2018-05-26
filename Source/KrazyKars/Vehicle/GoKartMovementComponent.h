@@ -4,9 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "GoKartMove.h"
 #include "GoKartMovementComponent.generated.h"
-
-struct FGoKartMove;
 
 
 UCLASS(Blueprintable, ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
@@ -33,9 +32,11 @@ public:
 	void SetVelocity(const FVector& value) { velocity = value; }
 
 	void SimulateMove(FGoKartMove move);
-	FGoKartMove CreateMove(float DeltaTime) const;
+
+	const FGoKartMove& GetLastMove() const { return lastMove; }
 
 private:
+	FGoKartMove CreateMove(float DeltaTime) const;
 	void UpdateLocationFromVelocity(float DeltaTime);
 
 
@@ -58,6 +59,7 @@ private:
 	float rollingResistanceCoefficient = 0.015f;
 
 	FVector velocity;
+	FGoKartMove lastMove;
 
 	float throttle;
 	float steeringThrow;

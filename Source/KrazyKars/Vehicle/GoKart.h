@@ -32,21 +32,9 @@ private:
 	void MoveForward(float value);
 	void MoveRight(float value);
 
-	void ClearAcknowledgedMoves(const FGoKartMove& lastServerMove);
-
-
-	UPROPERTY(ReplicatedUsing = OnRep_ServerState)
-	FGoKartState rep_ServerState;
-
-	UFUNCTION()
-	void OnRep_ServerState();
-
-
-	UFUNCTION(Server, Reliable, WithValidation)
-	void Server_SendMove(FGoKartMove move);
-
-	TArray<FGoKartMove> unackknowledgedMoves;
-
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(VisibleAnywhere)
 	class UGoKartMovementComponent* goKartMovement;
+
+	UPROPERTY(VisibleAnywhere)
+	class UGoKartMoveReplicationComponent* goKartMovementReplication;
 };
