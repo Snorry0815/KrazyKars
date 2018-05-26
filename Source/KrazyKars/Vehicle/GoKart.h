@@ -4,38 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Pawn.h"
+#include "GoKartState.h"
 #include "GoKart.generated.h"
-
-USTRUCT()
-struct FGoKartMove
-{
-	GENERATED_BODY()
-
-	UPROPERTY()
-	float throttle;
-
-	UPROPERTY()
-	float steeringThrow;
-
-	UPROPERTY()
-	float deltaTime;
-
-	UPROPERTY()
-	float time;
-};
-
-USTRUCT()
-struct FGoKartState
-{
-	GENERATED_BODY()
-
-	UPROPERTY()
-	FTransform transform;
-	UPROPERTY()
-	FVector velocity;
-	UPROPERTY()
-	FGoKartMove lastMove;
-};
 
 UCLASS()
 class KRAZYKARS_API AGoKart : public APawn
@@ -59,35 +29,10 @@ public:
 
 
 private:
-	void SimulateMove(FGoKartMove move);
-
-	void UpdateLocationFromVelocity(float DeltaTime);
-
 	void MoveForward(float value);
 	void MoveRight(float value);
 
-	void ApplyRotation(const FGoKartMove& move);
-	FVector CalculateMoveForce(const FGoKartMove& move) const;
-
-	UPROPERTY(EditAnywhere)
-	float mass = 1000.0f;
-
-	UPROPERTY(EditAnywhere)
-	float maxDrivingForce = 10000.0f;
-
-	UPROPERTY(EditAnywhere)
-	float minimumTurningRadius = 10.0f;
-
-	UPROPERTY(EditAnywhere)
-	float dragCoefficient = 16.0f;
-
-	UPROPERTY(EditAnywhere)
-	float rollingResistanceCoefficient = 0.015f;
-
-	FVector velocity;
-
-	float throttle;
-	float steeringThrow;
+	void ClearAcknowledgedMoves(const FGoKartMove& lastServerMove);
 
 
 	UPROPERTY(ReplicatedUsing = OnRep_ServerState)
@@ -99,4 +44,9 @@ private:
 
 	UFUNCTION(Server, Reliable, WithValidation)
 	void Server_SendMove(FGoKartMove move);
+
+	TArray<FGoKartMove> unackknowledgedMoves;
+
+	UPROPERTY(EditAnywhere)
+	class UGoKartMovementComponent* goKartMovement;
 };

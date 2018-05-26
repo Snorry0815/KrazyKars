@@ -5,6 +5,7 @@
 #include "Engine/World.h"
 #include "DrawDebugHelpers.h"
 #include "UnrealNetwork.h"
+#include "GoKartMovementComponent.h"
 
 namespace
 {
@@ -34,6 +35,8 @@ AGoKart::AGoKart()
 	PrimaryActorTick.bCanEverTick = true;
 
 	bReplicates = true;
+
+	goKartMovement = CreateDefaultSubobject<UGoKartMovementComponent>(TEXT("GoKartMovementComponent"));
 }
 
 // Called when the game starts or when spawned
@@ -47,21 +50,32 @@ void AGoKart::BeginPlay()
 	}
 }
 
-
 // Called every frame
 void AGoKart::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	if (IsLocallyControlled())
+	if (Role == ROLE_AutonomousProxy)
 	{
-		FGoKartMove move;
+		FGoKartMove move = goKartMovement->CreateMove(DeltaTime);
+
+		unackknowledgedMoves.Add(move);
+		goKartMovement->SimulateMove(move);
+		Server_SendMove(move);
+	}
+
+	// if we are server and in control of the pawn
+	if (Role == ROLE_Authority && GetRemoteRole() == ROLE_SimulatedProxy)
+	{
+		FGoKartMove move = goKartMovement->CreateMove(DeltaTime);
+		Server_SendMove(move);
+	}
+
+	if (Role == ROLE_SimulatedProxy)
+	{
+		FGoKartMove move = rep_ServerState.lastMove;
 		move.deltaTime = DeltaTime;
-		move.throttle = throttle;
-		move.steeringThrow = steeringThrow;
-		// TODO: move.time
-		Server_SendMove(move); 
-		SimulateMove(move);
+		goKartMovement->SimulateMove(move);
 	}
 
 	FVector location = GetActorLocation();
@@ -69,53 +83,24 @@ void AGoKart::Tick(float DeltaTime)
 	DrawDebugString(GetWorld(), FVector(0, 0, 100), text, this, FColor::White, DeltaTime);
 }
 
-void AGoKart::SimulateMove(FGoKartMove move)
-{
-	FVector force = CalculateMoveForce(move);
-	FVector acceleration = force / mass;
-	velocity += acceleration * move.deltaTime;
-
-	ApplyRotation(move);
-
-	UpdateLocationFromVelocity(move.deltaTime);
-}
-
-FVector AGoKart::CalculateMoveForce(const FGoKartMove& move) const
-{
-	FVector force = GetActorForwardVector() * maxDrivingForce * move.throttle;
-	force -= velocity.GetSafeNormal() * velocity.SizeSquared() * dragCoefficient;
-
-	auto* world = GetWorld();
-	float g = -world->GetGravityZ() / 100;
-	force -= velocity.GetSafeNormal() * g * mass * rollingResistanceCoefficient;
-
-	return force;
-}
-
-void AGoKart::ApplyRotation(const FGoKartMove& move)
-{
-	float dx = FVector::DotProduct(GetActorForwardVector(), velocity) * move.deltaTime;
-	float rotationAngle = dx * move.steeringThrow / minimumTurningRadius;
-
-	FQuat rotationDelta(GetActorUpVector(), rotationAngle);
-	AddActorWorldRotation(rotationDelta);
-	velocity = rotationDelta.RotateVector(velocity);
-}
-
 void AGoKart::OnRep_ServerState()
 {
 	SetActorTransform(rep_ServerState.transform);
-	velocity = rep_ServerState.velocity;
+	goKartMovement->SetVelocity(rep_ServerState.velocity);
+	ClearAcknowledgedMoves(rep_ServerState.lastMove);
+	for (const auto& move : unackknowledgedMoves)
+	{
+		goKartMovement->SimulateMove(move);
+	}
 }
 
-void AGoKart::UpdateLocationFromVelocity(float DeltaTime)
+void AGoKart::ClearAcknowledgedMoves(const FGoKartMove& lastServerMove)
 {
-	FVector move = velocity * DeltaTime * 100.0f;
-
-	FHitResult result;
-	AddActorWorldOffset(move, true, &result);
-	if (result.IsValidBlockingHit())
-		velocity = FVector::ZeroVector;
+	int32 index = unackknowledgedMoves.IndexOfByPredicate([&lastServerMove](const FGoKartMove& current) { return current.time == lastServerMove.time; });
+	if (index != INDEX_NONE)
+	{
+		unackknowledgedMoves.RemoveAt(0, index + 1);
+	}
 }
 
 // Called to bind functionality to input
@@ -129,20 +114,20 @@ void AGoKart::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 
 void AGoKart::MoveForward(float value)
 {
-	throttle = value;
+	goKartMovement->SetThrottle(value);
 }
 
 void AGoKart::MoveRight(float value)
 {
-	steeringThrow = value;
+	goKartMovement->SetSteeringThrow(value);
 }
 
 void AGoKart::Server_SendMove_Implementation(FGoKartMove move)
 {
-	SimulateMove(move);
+	goKartMovement->SimulateMove(move);
 	rep_ServerState.lastMove = move;
 	rep_ServerState.transform = GetActorTransform();
-	rep_ServerState.velocity = velocity;
+	rep_ServerState.velocity = goKartMovement->GetVelocity();
 }
 
 bool AGoKart::Server_SendMove_Validate(FGoKartMove move)
