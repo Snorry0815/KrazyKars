@@ -13,6 +13,7 @@ AGoKart::AGoKart()
 	PrimaryActorTick.bCanEverTick = true;
 
 	bReplicates = true;
+	bReplicateMovement = false;
 
 	goKartMovement = CreateDefaultSubobject<UGoKartMovementComponent>(TEXT("GoKartMovementComponent"));
 	goKartMovementReplication = CreateDefaultSubobject<UGoKartMoveReplicationComponent>(TEXT("GoKartMoveReplicationComponent"));

@@ -7,26 +7,28 @@
 namespace
 {
 
-	FString GetEnumText(ENetRole role)
-	{
-		switch (role) {
-		case ROLE_None:
-			return "None";
-		case ROLE_SimulatedProxy:
-			return "SimulatedProxy";
-		case ROLE_AutonomousProxy:
-			return "AutonomousProxy";
-		case ROLE_Authority:
-			return "Authority";
-		default:
-			return "Error";
-		}
+FString GetEnumText(ENetRole role)
+{
+	switch (role) {
+	case ROLE_None:
+		return "None";
+	case ROLE_SimulatedProxy:
+		return "SimulatedProxy";
+	case ROLE_AutonomousProxy:
+		return "AutonomousProxy";
+	case ROLE_Authority:
+		return "Authority";
+	default:
+		return "Error";
 	}
+}
 
 }
 
 // Sets default values for this component's properties
 UGoKartMoveReplicationComponent::UGoKartMoveReplicationComponent()
+	: Client_TimeSinceUpdate(0.0f)
+	, Client_TimeBetweenLastUpdates(0.0f)
 {
 	// Set this component to be initialized when the game starts, and to be ticked every frame.  You can turn these features
 	// off to improve performance if you don't need them.
@@ -67,9 +69,7 @@ void UGoKartMoveReplicationComponent::TickComponent(float DeltaTime, ELevelTick 
 
 	if (Role == ROLE_SimulatedProxy)
 	{
-		FGoKartMove move = rep_ServerState.lastMove;
-		move.deltaTime = DeltaTime;
-		goKartMovement->SimulateMove(move);
+		Client_Tick(DeltaTime);
 	}
 
 	FVector location = GetOwner()->GetActorLocation();
@@ -77,13 +77,51 @@ void UGoKartMoveReplicationComponent::TickComponent(float DeltaTime, ELevelTick 
 	DrawDebugString(GetWorld(), FVector(0, 0, 100), text, GetOwner(), FColor::White, DeltaTime);
 }
 
+void UGoKartMoveReplicationComponent::Client_Tick(float DeltaTime)
+{
+	Client_TimeSinceUpdate += DeltaTime;
+	if (Client_TimeBetweenLastUpdates < KINDA_SMALL_NUMBER)
+		return;
+
+	float alpha = FMath::Clamp(Client_TimeSinceUpdate / Client_TimeBetweenLastUpdates, 0.0f, 1.0f);
+	GetOwner()->SetActorLocation(FMath::LerpStable(Client_StartTransformation.GetLocation(), rep_ServerState.transform.GetLocation(), alpha));
+	GetOwner()->SetActorRotation(FQuat::Slerp(Client_StartTransformation.GetRotation(), rep_ServerState.transform.GetRotation(), alpha));
+}
+
 void UGoKartMoveReplicationComponent::OnRep_ServerState()
 {
-	if (goKartMovement == nullptr) 
+	switch (GetOwnerRole()) { 
+	case ROLE_None:
+		break;
+	case ROLE_SimulatedProxy:
+		SimulatedProxy_OnRep_ServerState();
+		break;
+	case ROLE_AutonomousProxy:
+		AutonomousProxy_OnRep_ServerState();
+		break;
+	case ROLE_Authority:
+		break;
+	case ROLE_MAX: 
+		break;
+
+	default: ;
+	}
+}
+
+void UGoKartMoveReplicationComponent::SimulatedProxy_OnRep_ServerState()
+{
+	Client_TimeBetweenLastUpdates = Client_TimeSinceUpdate;
+	Client_TimeSinceUpdate = 0.0f;
+	Client_StartTransformation = GetOwner()->GetActorTransform();
+}
+
+void UGoKartMoveReplicationComponent::AutonomousProxy_OnRep_ServerState()
+{
+	if (goKartMovement == nullptr)
 		return;
 
 	GetOwner()->SetActorTransform(rep_ServerState.transform);
-	
+
 	goKartMovement->SetVelocity(rep_ServerState.velocity);
 	ClearAcknowledgedMoves(rep_ServerState.lastMove);
 	for (const auto& move : unackknowledgedMoves)

@@ -29,17 +29,24 @@ private:
 	void ClearAcknowledgedMoves(const FGoKartMove& lastServerMove);
 	void UpdateServerState(const FGoKartMove& move);
 
+	void Client_Tick(float DeltaTime);
+
 	UPROPERTY(ReplicatedUsing = OnRep_ServerState)
 	FGoKartState rep_ServerState;
 
 	UFUNCTION()
 	void OnRep_ServerState();
+	void SimulatedProxy_OnRep_ServerState();
+	void AutonomousProxy_OnRep_ServerState();
 
 
 	UFUNCTION(Server, Reliable, WithValidation)
 	void Server_SendMove(FGoKartMove move);
 
 	TArray<FGoKartMove> unackknowledgedMoves;
+	float Client_TimeSinceUpdate;
+	float Client_TimeBetweenLastUpdates;
+	FTransform Client_StartTransformation;
 
 	class UGoKartMovementComponent* goKartMovement;
 };
