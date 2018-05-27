@@ -28,13 +28,13 @@ public:
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
 
+	UPROPERTY(VisibleAnywhere, BlueprintreadOnly)
+	class UGoKartMovementComponent* goKartMovement;
+
+	UPROPERTY(VisibleAnywhere, BlueprintreadOnly)
+	class UGoKartMoveReplicationComponent* goKartMovementReplication;
+
 private:
 	void MoveForward(float value);
 	void MoveRight(float value);
-
-	UPROPERTY(VisibleAnywhere)
-	class UGoKartMovementComponent* goKartMovement;
-
-	UPROPERTY(VisibleAnywhere)
-	class UGoKartMoveReplicationComponent* goKartMovementReplication;
 };

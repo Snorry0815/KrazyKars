@@ -25,6 +25,35 @@ FString GetEnumText(ENetRole role)
 
 }
 
+FHermiteCubicSpline::FHermiteCubicSpline(float Client_TimeSinceUpdate, float Client_TimeBetweenLastUpdates,
+	const FTransform& Client_StartTransformation, const FTransform& serverStateTransform,
+	const FVector& Client_StartVelocity, const FVector& serverStateVelocity)
+	: alpha(FMath::Clamp(Client_TimeSinceUpdate / Client_TimeBetweenLastUpdates, 0.0f, 1.0f))
+	, startLocation(Client_StartTransformation.GetLocation())
+	, targetLocation(serverStateTransform.GetLocation())
+	, startRotation(Client_StartTransformation.GetRotation())
+	, targetRotation(serverStateTransform.GetRotation())
+	, velocityDerivative(Client_TimeBetweenLastUpdates * 100.0f)
+	, startDerivative(Client_StartVelocity * velocityDerivative)
+	, targetDerivative(serverStateVelocity * velocityDerivative)
+{
+}
+
+FVector FHermiteCubicSpline::CreateCurrentLocation() const
+{
+	return FMath::CubicInterp(startLocation, startDerivative, targetLocation, targetDerivative, alpha);
+}
+
+FVector FHermiteCubicSpline::CreateCurrentVelocity() const
+{
+	return FMath::CubicInterpDerivative(startLocation, startDerivative, targetLocation, targetDerivative, alpha) / velocityDerivative;
+}
+
+FQuat FHermiteCubicSpline::CreateCurrentRotation() const
+{
+	return FQuat::Slerp(startRotation, targetRotation, alpha);
+}
+
 // Sets default values for this component's properties
 UGoKartMoveReplicationComponent::UGoKartMoveReplicationComponent()
 	: Client_TimeSinceUpdate(0.0f)
@@ -79,13 +108,22 @@ void UGoKartMoveReplicationComponent::TickComponent(float DeltaTime, ELevelTick 
 
 void UGoKartMoveReplicationComponent::Client_Tick(float DeltaTime)
 {
-	Client_TimeSinceUpdate += DeltaTime;
+	Client_TimeSinceUpdate += DeltaTime;	
+	
+	if (goKartMovement == nullptr)
+		return;
+
+	if (meshOffsetRoot == nullptr)
+		return;
+
 	if (Client_TimeBetweenLastUpdates < KINDA_SMALL_NUMBER)
 		return;
 
-	float alpha = FMath::Clamp(Client_TimeSinceUpdate / Client_TimeBetweenLastUpdates, 0.0f, 1.0f);
-	GetOwner()->SetActorLocation(FMath::LerpStable(Client_StartTransformation.GetLocation(), rep_ServerState.transform.GetLocation(), alpha));
-	GetOwner()->SetActorRotation(FQuat::Slerp(Client_StartTransformation.GetRotation(), rep_ServerState.transform.GetRotation(), alpha));
+
+	FHermiteCubicSpline hermiteCubicSpline(Client_TimeSinceUpdate, Client_TimeBetweenLastUpdates, Client_StartTransformation, rep_ServerState.transform, Client_StartVelocity, rep_ServerState.velocity);
+	meshOffsetRoot->SetWorldLocationAndRotation(hermiteCubicSpline.CreateCurrentLocation(), hermiteCubicSpline.CreateCurrentRotation());
+	goKartMovement->SetVelocity(hermiteCubicSpline.CreateCurrentVelocity());
+	//GetOwner()->SetActorRotation(hermiteCubicSpline.CreateCurrentRotation());
 }
 
 void UGoKartMoveReplicationComponent::OnRep_ServerState()
@@ -110,9 +148,20 @@ void UGoKartMoveReplicationComponent::OnRep_ServerState()
 
 void UGoKartMoveReplicationComponent::SimulatedProxy_OnRep_ServerState()
 {
+	if (goKartMovement == nullptr)
+		return;
+
+	if (meshOffsetRoot == nullptr)
+		return;
+
+
 	Client_TimeBetweenLastUpdates = Client_TimeSinceUpdate;
 	Client_TimeSinceUpdate = 0.0f;
-	Client_StartTransformation = GetOwner()->GetActorTransform();
+	Client_StartTransformation = meshOffsetRoot->GetComponentTransform();
+	Client_StartVelocity = goKartMovement->GetVelocity();
+
+	GetOwner()->SetActorTransform(rep_ServerState.transform);
+	meshOffsetRoot->SetWorldTransform(Client_StartTransformation);
 }
 
 void UGoKartMoveReplicationComponent::AutonomousProxy_OnRep_ServerState()

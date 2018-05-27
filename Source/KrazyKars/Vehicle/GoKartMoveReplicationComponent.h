@@ -7,6 +7,27 @@
 #include "GoKartState.h"
 #include "GoKartMoveReplicationComponent.generated.h"
 
+struct FHermiteCubicSpline
+{
+public:
+	FHermiteCubicSpline(float Client_TimeSinceUpdate, float Client_TimeBetweenLastUpdates,
+	    const FTransform& Client_StartTransformation, const FTransform& serverStateTransform
+		, const FVector& Client_StartVelocity, const FVector& serverStateVelocity);
+
+	FVector CreateCurrentLocation() const;
+	FVector CreateCurrentVelocity() const;
+	FQuat CreateCurrentRotation() const;
+
+private:
+	const float alpha;
+	const FVector startLocation;
+	const FVector targetLocation;
+	const FQuat startRotation;
+	const FQuat targetRotation;
+	const float velocityDerivative;
+	const FVector startDerivative;
+	const FVector targetDerivative;
+};
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class KRAZYKARS_API UGoKartMoveReplicationComponent : public UActorComponent
@@ -47,6 +68,13 @@ private:
 	float Client_TimeSinceUpdate;
 	float Client_TimeBetweenLastUpdates;
 	FTransform Client_StartTransformation;
+	FVector Client_StartVelocity;
 
 	class UGoKartMovementComponent* goKartMovement;
+
+	UPROPERTY()
+	USceneComponent* meshOffsetRoot;
+
+	UFUNCTION(Blueprintcallable)
+	void SetMeshOffsetRoot(USceneComponent* root) { meshOffsetRoot = root; }
 };
